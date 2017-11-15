@@ -1,0 +1,200 @@
+<!doctype html>
+<html>
+<head>
+	<title>Snake - Rede Neural + Algoritmo Genético</title>
+	<meta charset="UTF-8" />
+	<link href='http://fonts.googleapis.com/css?family=Roboto' rel='stylesheet' type='text/css' />
+	<meta name="viewport" content="width=850" />
+	<style>
+	body {
+		font-family: 'Roboto', sans-serif;
+		font-size: 12px;
+	}
+	
+	DIV#snake-canvas-wrapper {
+		width: 850px;
+		text-align: center;
+		float: left;
+	}
+
+	DIV#neural-wrapper {
+		float: right;
+	}
+	
+	DIV#neural-params {
+		text-align: center;
+		width: 850px;
+		margin: auto;
+	}
+	
+	DIV#neural-params TABLE {
+		text-align: center;
+		width: 850px;
+	}
+	
+	DIV#neural-params TD {
+		width: 25%;
+	}
+	
+	DIV#neural-canvas-wrapper {
+		width: 850px;
+		height: 500px;
+		margin: auto;
+	}
+	
+	CANVAS#neural-canvas {
+		width: 700px;
+		height: 500px;
+		margin: auto;
+		display: block;
+	}
+	
+	DIV#disclaimer {
+		font-size: 10pt;
+		margin: 30px auto;
+		color: #888888;
+		width: 850px;
+		text-align: justify;
+	}
+
+	.clearfix {
+		margin: 0 auto;
+		max-width: 1700px;
+		overflow: auto;
+		zoom: 1;
+	}
+	</style>
+</head>
+<body>
+	<div class="clearfix">
+		<div id="snake-canvas-wrapper">
+			<h1>Exemplo - Rede Neural + Algoritmo Genético</h1>
+			<canvas width="850" height="600" id="snake-canvas" style="border:1px solid #333;" onclick="snake.game.begin();"></canvas>
+		</div>
+		<div id="neural-wrapper">
+			<div id="neural-params">
+				<h2>Rede Neural</h2>
+				<table>
+					<tr>
+						<th>Fitness</th>
+						<th>Max Fitness</th>
+						<th>Geração</th>
+						<th>Mutação</th>
+						<th>Delay</th>
+					</tr>
+					<tr>
+						<td id="text-score"></td>
+						<td id="text-max-score"></td>
+						<td id="text-generation"></td>
+						<td id="text-specimes"></td>
+						<td id="text-speed"><input type="text" id="field-speed" value="10" size="5" style="text-align:center" onkeyup="window.snake.game.setRefreshRate(this.value)" /></td>
+					</tr>
+				</table>
+			</div>
+			<div id="neural-canvas-wrapper">
+				<canvas id="neural-canvas" width="700" height="500"></canvas>
+			</div>
+		</div>
+	</div>
+	<div id="disclaimer">
+		Pode levar algum tempo para a Snake começar a ter um comportamento interessante. Atualize o navegador para começar um processo de aprendizagem novo caso o mesmo não esteja caminhando para um satisfatório. Este exemplo de Rede Neural + Algoritmo Genético não está otimizado e é somente ilustrativo. Ela está baseando puramente na aleatoriedade evolutiva, testada como "seleção natural". Redes Neurais reais podem se basear em técnicas como propagação de erros e outras para aumentar a agilidade com que alcançam scores mais altos.
+	</div>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+	<script src="Snake.js"></script>
+	<script src="JSNetwork.js"></script>
+	<script src="GeneticAlgorithm.js"></script>
+	<script>
+		function indexOfMax(arr) {
+			if (arr.length === 0) {
+				return -1;
+			}
+
+			var max = arr[0];
+			var maxIndex = 0;
+
+			for (var i = 1; i < arr.length; i++) {
+				if (arr[i] > max) {
+					maxIndex = i;
+					max = arr[i];
+				}
+			}
+
+			return maxIndex;
+		}
+		
+		window.onload = function(){
+			// Initial network
+			initialNetwork = new NeuralNetwork();
+			initialNetwork.addInput( new Node("Snake X") ); //Snake X
+			initialNetwork.addInput( new Node("Snake Y") ); //Snake Y
+			initialNetwork.addInput( new Node("Food X") ); //Food X
+			initialNetwork.addInput( new Node("Food Y") ); //Food Y
+			initialNetwork.addInput( new Node("Bias") ); //Bias
+
+			for(i=0; i<16; i++)
+				initialNetwork.addHidden1( new Node() ); // Primeira camada hidden
+
+			for(i=0; i<16; i++)
+				initialNetwork.addHidden2( new Node() ); // Primeira camada hidden
+
+			initialNetwork.addOutput( new Node("←") ); // Esquerda
+			initialNetwork.addOutput( new Node("→") ); // Direita
+			initialNetwork.addOutput( new Node("↑") ); // Cima
+			initialNetwork.addOutput( new Node("↓") ); // Baixo
+
+			// Adding Connections
+			initialNetwork.input.forEach(function(inputNode, index) {
+				initialNetwork.hidden1.forEach(function(hidden1Node, index) {
+					initialNetwork.addConnection(new Connection(inputNode.id, hidden1Node.id, getFloatRandom(-1, 1)));
+				});
+			});
+
+			initialNetwork.hidden1.forEach(function(hidden1Node, index) {
+				initialNetwork.hidden2.forEach(function(hidden2Node, index) {
+					initialNetwork.addConnection(new Connection(hidden1Node.id, hidden2Node.id, getFloatRandom(-1, 1)));
+				});
+			});
+
+			initialNetwork.hidden2.forEach(function(hidden2Node, index) {
+				initialNetwork.output.forEach(function(outputNode, index) {
+					initialNetwork.addConnection(new Connection(hidden2Node.id, outputNode.id, getFloatRandom(-1, 1)));
+				});
+			});
+			
+			geneticAlgorithm = new GeneticAlgorithm(initialNetwork);
+			geneticAlgorithm.mutate();
+
+			count = 0;
+			window.snake.game.setControlCallback(function() {
+				// Gera os inputs
+				var foodPos = window.snake.game.getFoodPos();
+				var snakePos = window.snake.game.getPos();
+				
+				var inputSnakeX = (snakePos[0][0] / 85);
+				var inputSnakeY = (snakePos[0][1] / 60);
+				var inputFoodX = (Math.round(foodPos[0]/10))/85;
+				var inputFoodY = (Math.round(foodPos[1]/10))/60;
+
+				// Insere os Inputs na rede e lê o output
+				var networkOutput = geneticAlgorithm.getActiveNetwork().activate([inputSnakeX, inputSnakeY, inputFoodX, inputFoodY, 1]);
+				geneticAlgorithm.getActiveNetwork().drawToCanvas( document.getElementById('neural-canvas') );
+				
+				count++;
+				geneticAlgorithm.getActiveNetwork().score = count + (snake.game.getScore() * 100);
+				document.getElementById('text-score').innerHTML = geneticAlgorithm.getActiveNetwork().score;
+				document.getElementById('text-max-score').innerHTML = geneticAlgorithm.maxScore;
+				document.getElementById('text-generation').innerHTML = geneticAlgorithm.activeGeneration;
+				document.getElementById('text-specimes').innerHTML = geneticAlgorithm.activeNetworkMutations + 1;
+				
+				return indexOfMax(networkOutput);
+			});
+			window.snake.game.setGameOverCallback(function() {
+				count = 0;
+				geneticAlgorithm.naturalSelection();
+				window.snake.game.restart();
+			});
+			window.snake.game.start();
+		}
+	</script>
+</body>
+</html>
